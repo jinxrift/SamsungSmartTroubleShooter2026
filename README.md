@@ -344,6 +344,87 @@ The implementation should therefore prioritize correctness, robustness, semantic
 
 Samsung PRISM Gen AI Hackathon 3.0
 
+## Team File Division
+
+Each member should primarily work only on their assigned files. Coordinate with the team before modifying shared files.
+
+### Person 1 — Backend / Integration
+
+**Branch:** `backend`
+
+Files:
+
+* `app/main.py`
+* `app/api/routes.py`
+
+Responsibilities:
+
+* FastAPI setup
+* API endpoints
+* Integration of SIIS engine, deeplink matcher, and cache
+* Final response validation
+
+### Person 2 — SIIS + LLM
+
+**Branch:** `siis-llm`
+
+File:
+
+* `app/services/siis_engine.py`
+
+Responsibilities:
+
+* SIIS response processing
+* Troubleshooting logic
+* LLM integration
+* Generate troubleshooting structure
+
+### Person 3 — Deeplink Matching
+
+**Branch:** `deeplink-matcher`
+
+File:
+
+* `app/services/deeplink_matcher.py`
+
+Responsibilities:
+
+* Deeplink loading
+* Semantic matching
+* Selecting appropriate Samsung deeplinks
+* Handling unmatched deeplinks
+
+### Person 4 — Cache + Testing
+
+**Branch:** `cache-testing`
+
+Files:
+
+* `app/services/cache.py`
+* `tests/test_health.py`
+* `tests/test_troubleshoot.py`
+* `tests/test_deeplink.py`
+* `tests/test_cache.py`
+
+Responsibilities:
+
+* Query caching
+* Cache hit handling
+* Performance testing
+* Automated tests
+
+### Shared Files
+
+These files are common to the whole team:
+
+* `app/models/schema.py` — Samsung-provided schema; do not modify without team coordination
+* `data/siis_responses.json` — Samsung-provided data; do not modify
+* `data/deeplinks.json` — Samsung-provided data; do not modify
+* `requirements.txt`
+* `README.md`
+
+**Important:** Do not directly push to `main`. Work on your assigned branch and create a Pull Request when your changes are ready.
+
 **Team Members**
 
 * Person 1 — Backend / Integration
