@@ -1,74 +1,40 @@
-import json
-from openai import OpenAI
-
-client = OpenAI()
+from app.services.llm_engine import extract_with_llm
 
 
-SYSTEM_PROMPT = """
-You are a troubleshooting information extraction engine.
+def process_siis(query, siis_response):
 
-Your job is to extract actionable troubleshooting information
-from the provided SIIS response.
-
-Rules:
-1. Do not invent troubleshooting steps.
-2. Use only information present in the SIIS response.
-3. Identify actual troubleshooting actions.
-4. Ignore purely explanatory sections unless they contain an actionable instruction.
-5. Preserve the original meaning of the troubleshooting steps.
-6. Return valid JSON only.
-
-Output format:
-
-{
-  "actions": [
-    {
-      "actionName": "string",
-      "description": "string",
-      "steps": [
-        "string"
-      ],
-      "category": "manual"
-    }
-  ]
-}
-
-The category must be one of:
-- auto
-- manual
-- critical
-"""
-
-
-def extract_with_llm(query, title, content):
-    prompt = f"""
-User query:
-{query}
-
-SIIS title:
-{title}
-
-SIIS response:
-{content}
-
-Extract the troubleshooting actions and steps.
-"""
-
-    response = client.chat.completions.create(
-        model="gpt-5.6",
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0
+    llm_result = extract_with_llm(
+        query,
+        siis_response.title,
+        siis_response.content
     )
 
-    text = response.choices[0].message.content
+    actions = []
 
-    return json.loads(text)
+    for item in llm_result["actions"]:
+
+        action = {
+            "actionName": item["actionName"],
+            "description": item["description"],
+            "stepGroups": [
+                {
+                    "steps": item["steps"],
+                    "actionableDeeplink": None,
+                    "validationDeeplink": None
+                }
+            ],
+            "category": item.get("category", "manual")
+        }
+
+        actions.append(action)
+
+    return {
+        "goals": [
+            {
+                "goal": f"Follow these steps to perform this {siis_response.title} Troubleshooting",
+                "title": siis_response.title,
+                "actions": actions,
+                "score": 0.95
+            }
+        ]
+    }
