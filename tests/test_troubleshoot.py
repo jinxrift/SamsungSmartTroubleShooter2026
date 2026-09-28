@@ -25,24 +25,21 @@ def test_all_siis_responses():
             content=record["siis_response"]["content"]
         )
 
-        # Debug Record 8
-        if i == 8:
-            print("\n========== RECORD 8 CONTENT ==========")
-            print(f"Title: {siis_response.title}")
-            print("\nContent:")
-            print(siis_response.content)
-            print("======================================")
-
         result = process_siis(query, siis_response)
 
         goals = result.get("goals", [])
 
         print(f"\nRecord {i}")
-        print(f"Query: {query}")
         print(
             f"Actions generated: "
             f"{len(goals[0]['actions']) if goals else 0}"
         )
+
+        # Print full output only for Record 17
+        if i == 19:
+            print("\n========== RECORD 17 OUTPUT ==========")
+            print(json.dumps(result, indent=2))
+            print("======================================")
 
         assert "goals" in result
         assert len(goals) > 0

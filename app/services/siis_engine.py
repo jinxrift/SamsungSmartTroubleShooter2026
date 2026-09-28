@@ -95,44 +95,40 @@ def generate_description(action_name):
     if "verify" in name:
         return "It will help you verify the device connection"
 
-    if "review" in name:
-        return "It will help you review the relevant settings"
+    if "restart" in name:
+        return "It will help you restart the device safely"
 
     if "clear" in name:
         return "It will help you clear temporary app data"
 
-    if "restart" in name:
-        return "It will help you restart the device safely"
-
-    if "contact" in name:
+    if "contact" in name or "assistance" in name:
         return "It will help you get further assistance"
 
-    if "customize" in name:
-        return "It will help you customize device settings"
+    if "repair" in name or "service center" in name:
+        return "It will help you arrange device repair"
 
-    if "use" in name:
-        return "It will help you use the device feature"
+    if "update" in name:
+        return "It will help you update the device software"
 
-    if "swipe" in name:
-        return "It will help you configure swipe gestures"
+    if "safe mode" in name:
+        return "It will help you check for app-related issues"
 
-    if "exit" in name:
-        return "It will help you exit the current feature"
+    if "factory data reset" in name:
+        return "It will help you reset the device"
 
-    if "create" in name:
-        return "It will help you create the desired setup"
+    if "charger" in name:
+        return "It will help you check charging-related issues"
 
-    if "remove" in name:
-        return "It will help you remove unwanted shortcuts"
+    if "gesture" in name:
+        return "It will help you adjust navigation settings"
 
-    if "touchscreen" in name:
+    if "sensitivity" in name:
+        return "It will help you adjust touch sensitivity"
+
+    if "touchscreen doesn't work" in name:
         return "It will help you access your device data"
-
-    if "nothing is visible" in name:
-        return "It will help you access data without screen visibility"
-
+    
     return "It will help you troubleshoot the reported issue"
-
 
 def process_siis(query, siis_response):
     title = siis_response.title
