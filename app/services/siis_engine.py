@@ -1,180 +1,130 @@
+"""Convert supplied SIIS text into schema-compatible troubleshooting goals."""
+
 import re
 
+from app.models.schema import Goal
+from app.services.llm_engine import extract_with_llm
 
-def extract_sections(content):
+
+_NUMBERED_SECTION = re.compile(
+    r"^\s*(?:#{1,6}\s*)?(?:step\s+)?(\d+)[.:)]\s*(.*?)\s*$"
+    r"(.*?)(?=^\s*(?:#{1,6}\s*)?(?:step\s+)?\d+[.:)]\s*|\Z)",
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+_HEADING = re.compile(
+    r"^\s*#{1,6}\s+(.+?)\s*$\n?(.*?)(?=^\s*#{1,6}\s+.+?$|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def _clean_title(value: str) -> str:
+    value = re.sub(r"^\s*(?:step\s+)?\d+[.:)]\s*", "", value, flags=re.I)
+    value = re.sub(r"[*_`#]", "", value)
+    return re.sub(r"\s+", " ", value).strip(" \t:-")
+
+
+def _clean_steps(text: str) -> list[str]:
+    steps = []
+    for line in text.splitlines():
+        step = re.sub(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)", "", line).strip()
+        step = re.sub(r"[*_`]", "", step).strip()
+        if step and step not in {"\"\"", "'''"}:
+            steps.append(step)
+    return steps
+
+
+def _sections(content: str) -> list[tuple[str, str]]:
+    numbered = []
+    for match in _NUMBERED_SECTION.finditer(content):
+        title = _clean_title(match.group(2))
+        if title:
+            numbered.append((title, match.group(3)))
+    if numbered:
+        return numbered
+
     sections = []
+    for match in _HEADING.finditer(content):
+        title = _clean_title(match.group(1))
+        if title and not title.casefold().startswith(("troubleshooting ", "how to ")):
+            sections.append((title, match.group(2)))
+    if sections:
+        return sections
 
-    # =========================================================
-    # FORMAT 1:
-    # Step 1: Heading
-    # Step 2: Heading
-    # =========================================================
-    numbered_pattern = (
-        r"(?:#{1,3}\s*)?"
-        r"(?:Step\s+)?"
-        r"(\d+)[.:]\s*"
-        r"(.+?)"
-        r"(?=\n(?:#{1,3}\s*)?(?:Step\s+)?\d+[.:]|\Z)"
-    )
+    text = content.strip()
+    if not text:
+        return []
+    first_line, separator, remainder = text.partition("\n")
+    title = _clean_title(first_line)
+    steps = remainder if separator else text
+    if not title or title.casefold() == steps.casefold():
+        title = "Troubleshooting steps"
+    return [(title, steps)]
 
-    numbered_matches = re.findall(
-        numbered_pattern,
-        content,
-        re.IGNORECASE | re.DOTALL
-    )
 
-    for number, text in numbered_matches:
-        lines = [
-            line.strip()
-            for line in text.split("\n")
-            if line.strip()
-        ]
+def _category(action_name: str, steps: list[str]) -> str:
+    text = f"{action_name} {' '.join(steps)}".casefold()
+    if re.search(r"\b(factory reset|erase|wipe|liquid damage|physical damage|repair|service center)\b", text):
+        return "critical"
+    return "manual"
 
-        if not lines:
+
+def _description(action_name: str) -> str:
+    verb = action_name.split(maxsplit=1)[0].casefold() if action_name else ""
+    descriptions = {
+        "check": "It will help you check device issues",
+        "verify": "It will help you verify device connections",
+        "restart": "It will help you restart your device safely",
+        "clear": "It will help clear temporary app data",
+        "update": "It will help you update device software",
+        "contact": "It will help you contact support",
+    }
+    return descriptions.get(verb, "It will help you troubleshoot this issue")
+
+
+def parse_siis_actions(content: str) -> list[dict]:
+    """Parse action titles and steps without adding instructions to SIIS text."""
+    actions = []
+    for title, body in _sections(content):
+        steps = _clean_steps(body)
+        if not steps:
             continue
+        actions.append(
+            {
+                "actionName": title,
+                "description": _description(title),
+                "steps": steps,
+                "category": _category(title, steps),
+            }
+        )
+    return actions
 
-        sections.append({
-            "number": int(number),
-            "text": "\n".join(lines)
-        })
-
-    # =========================================================
-    # FORMAT 2:
-    # ## Heading
-    # content...
-    #
-    # ## Another Heading
-    # content...
-    # =========================================================
-    heading_pattern = (
-        r"^#{1,3}\s+(.+?)\s*$"
-        r"(.*?)(?=^#{1,3}\s+.+?$|\Z)"
-    )
-
-    heading_matches = re.findall(
-        heading_pattern,
-        content,
-        re.MULTILINE | re.DOTALL
-    )
-
-    # Only use heading format if numbered sections
-    # were not found.
-    if not numbered_matches:
-
-        for index, (heading, text) in enumerate(
-            heading_matches,
-            start=1
-        ):
-            heading = heading.strip()
-
-            lines = [
-                line.strip()
-                for line in text.split("\n")
-                if line.strip()
-            ]
-
-            if not heading:
-                continue
-
-            sections.append({
-                "number": index,
-                "text": "\n".join(
-                    [heading] + lines
-                )
-            })
-
-    return sections
-
-
-def generate_description(action_name):
-    name = action_name.lower()
-
-    if "check" in name:
-        return "It will help you check the device issue"
-
-    if "verify" in name:
-        return "It will help you verify the device connection"
-
-    if "restart" in name:
-        return "It will help you restart the device safely"
-
-    if "clear" in name:
-        return "It will help you clear temporary app data"
-
-    if "contact" in name or "assistance" in name:
-        return "It will help you get further assistance"
-
-    if "repair" in name or "service center" in name:
-        return "It will help you arrange device repair"
-
-    if "update" in name:
-        return "It will help you update the device software"
-
-    if "safe mode" in name:
-        return "It will help you check for app-related issues"
-
-    if "factory data reset" in name:
-        return "It will help you reset the device"
-
-    if "charger" in name:
-        return "It will help you check charging-related issues"
-
-    if "gesture" in name:
-        return "It will help you adjust navigation settings"
-
-    if "sensitivity" in name:
-        return "It will help you adjust touch sensitivity"
-
-    if "touchscreen doesn't work" in name:
-        return "It will help you access your device data"
-    
-    return "It will help you troubleshoot the reported issue"
 
 def process_siis(query, siis_response):
-    title = siis_response.title
-    content = siis_response.content
-
-    sections = extract_sections(content)
-
-    goals = [
+    extracted = extract_with_llm(
+        query,
+        siis_response.title,
+        siis_response.content,
+    )
+    actions = [
         {
-            "goal": f"Follow these steps to perform this {title} Troubleshooting",
-            "title": title,
-            "actions": [],
-            "score": 0.95
-        }
-    ]
-
-    for section in sections:
-
-        lines = [
-            line.strip()
-            for line in section["text"].split("\n")
-            if line.strip()
-        ]
-
-        if not lines:
-            continue
-
-        # First line = action heading
-        action_name = lines[0]
-
-        # Remaining lines = actual steps
-        steps = lines[1:]
-
-        action = {
-            "actionName": action_name,
-            "description": generate_description(action_name),
+            "actionName": item["actionName"],
+            "description": item["description"],
             "stepGroups": [
                 {
-                    "steps": steps
+                    "steps": item["steps"],
+                    "actionableDeeplink": None,
+                    "validationDeeplink": None,
                 }
             ],
-            "category": "manual"
+            "category": item["category"],
         }
-
-        goals[0]["actions"].append(action)
-
-    return {
-        "goals": goals
+        for item in extracted["actions"]
+    ]
+    goal = {
+        "goal": f"Follow these steps to troubleshoot {siis_response.title}",
+        "title": siis_response.title,
+        "actions": actions,
+        "score": 0.95,
     }
+    Goal(**goal)
+    return {"goals": [goal]}

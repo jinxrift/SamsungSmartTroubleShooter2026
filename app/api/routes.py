@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -25,31 +28,24 @@ class TroubleshootRequest(BaseModel):
     response_model=ContextDeeplinkResponse
 )
 def troubleshoot(request: TroubleshootRequest):
-
-    # 1. Create cache key
-    cache_key = request.query
-
-    # 2. Check cache
+    siis_payload = {
+        "title": request.siis_response.title,
+        "content": request.siis_response.content,
+    }
+    payload_digest = hashlib.sha256(
+        json.dumps(siis_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    cache_key = f"{request.query} {payload_digest}"
     cached_result = get(cache_key)
-
     if cached_result is not None:
         return cached_result
 
-    # 3. Process SIIS response
     troubleshooting = process_siis(
         request.query,
         request.siis_response
     )
-
-    # 4. Match Samsung deeplinks
     result = match_deeplinks(troubleshooting)
-
-    # 5. Cache result
-    response = {
-        "contexts": result.get("goals", [])
-    }
-
-    set(cache_key, response)
-
-    # 6. Return final response
+    response = ContextDeeplinkResponse(contexts=result.get("goals", []))
+    response_data = response.model_dump()
+    set(cache_key, response_data)
     return response
